@@ -1,0 +1,19 @@
+{
+ "bookings": [
+  {"id": "B1", "name": "Mrs Okafor", "phone": "+2348030000101", "service": "Dental cleaning", "at": "2026-10-12T10:00"},
+  {"id": "B2", "name": "Mr Adamu", "phone": "+2348030000102", "service": "Eye test", "at": "2026-10-12T15:00"},
+  {"id": "B3", "name": "Ms Eze", "phone": "+2348030000103", "service": "Dental cleaning", "at": "2026-10-13T09:00"},
+  {"id": "B4", "name": "Mr Bassey", "phone": "+2348030000104", "service": "Physiotherapy", "at": "2026-10-14T08:30"},
+  {"id": "B5", "name": "Mrs Lawal", "phone": "+2348030000105", "service": "Eye test", "at": "2026-10-12T17:00"}
+ ],
+ "waitlist": [
+  {"name": "Kunle", "phone": "+2348030000201", "service": "Dental cleaning"},
+  {"name": "Joy", "phone": "+2348030000202", "service": "Eye test"}
+ ],
+ "replies": [
+  {"booking_id": "B1", "text": "1"},
+  {"booking_id": "B3", "text": "Sorry I can't make it, cancel please"},
+  {"booking_id": "B4", "text": "2 - can we do another day?"},
+  {"booking_id": "B5", "text": "Who is this?"}
+ ]
+}

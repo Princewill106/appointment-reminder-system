@@ -1,0 +1,290 @@
+{
+  "name": "Appointment Reminder System (AI Automation Projects #30)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "58063ef7-38fe-505f-a32b-fee5069736cb",
+      "name": "Schedule (hourly)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "a2156f2f-2d06-5490-a400-c4bd151db05b",
+      "name": "Read bookings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4c3fd022-842f-583d-9d82-2abafd37cc4d",
+      "name": "Test with sample data",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sample data from this repo. Click 'Test workflow' to run the whole flow on it.\nconst sample = [\n {\n  \"id\": \"B1\",\n  \"name\": \"Mrs Okafor\",\n  \"phone\": \"+2348030000101\",\n  \"service\": \"Dental cleaning\",\n  \"hours_until\": 47.5,\n  \"reply\": \"\",\n  \"sent_48h\": \"no\",\n  \"sent_2h\": \"no\"\n },\n {\n  \"id\": \"B2\",\n  \"name\": \"Mr Adamu\",\n  \"phone\": \"+2348030000102\",\n  \"service\": \"Eye test\",\n  \"hours_until\": 1.8,\n  \"reply\": \"1\",\n  \"sent_48h\": \"yes\",\n  \"sent_2h\": \"no\"\n },\n {\n  \"id\": \"B3\",\n  \"name\": \"Ms Eze\",\n  \"phone\": \"+2348030000103\",\n  \"service\": \"Dental cleaning\",\n  \"hours_until\": 20,\n  \"reply\": \"Sorry I can't make it, cancel please\",\n  \"sent_48h\": \"yes\",\n  \"sent_2h\": \"no\",\n  \"waitlist_name\": \"Kunle\",\n  \"waitlist_phone\": \"+2348030000201\"\n },\n {\n  \"id\": \"B4\",\n  \"name\": \"Mr Bassey\",\n  \"phone\": \"+2348030000104\",\n  \"service\": \"Physiotherapy\",\n  \"hours_until\": 18,\n  \"reply\": \"\",\n  \"sent_48h\": \"yes\",\n  \"sent_2h\": \"no\"\n }\n];\nreturn sample.map(json => ({ json }));"
+      },
+      "id": "f2d9bbbc-f81e-5532-b8e6-171ec97d90d0",
+      "name": "Sample data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Appointment Reminder System: core logic (ported from main.py)\n\n// ---- input normaliser (works for Webhook, Form, WhatsApp, Gmail, Sheets and sample data)\nconst input = $input.all().flatMap(i => {\n  const j = i.json || {};\n  if (j.messages && Array.isArray(j.messages)) {           // WhatsApp Trigger\n    return j.messages.filter(m => m.text).map(m => ({ from: '+' + m.from, text: m.text.body }));\n  }\n  if (j.Subject !== undefined || j.From !== undefined) {     // Gmail Trigger (simple)\n    return [{ from: (j.From || '').replace(/.*<|>.*/g, ''), subject: j.Subject || '', body: j.snippet || j.text || '' }];\n  }\n  const b = (j.body !== undefined && j.headers !== undefined) ? j.body : j;   // Webhook wraps payload in body\n  if (Array.isArray(b)) return b;\n  if (b && Array.isArray(b.items)) return b.items;\n  return [b];\n});\n\nconst parse = t => { t = String(t || '').trim().toLowerCase(); if (!t) return 'none';\n  if (/^(1|yes|y|confirm|ok|okay)\\b/.test(t)) return 'confirm'; if (/^(2|reschedule|change|move)\\b/.test(t) || t.includes('another day')) return 'reschedule';\n  if (/^(3|no|cancel)\\b/.test(t) || t.includes(\"can't make it\")) return 'cancel'; return 'unclear'; };\nconst out = [];\nfor (const b of input) {\n  const h = Number(b.hours_until), reply = parse(b.reply);\n  if (reply === 'cancel') { if (b.waitlist_name) out.push({ route: 'whatsapp', to: b.waitlist_phone, booking: b.id, message: `Hi ${b.waitlist_name}, a ${b.service} slot just opened. Reply YES to take it.` }); continue; }\n  if (h <= 48 && h > 46 && b.sent_48h !== 'yes') out.push({ route: 'whatsapp', to: b.phone, booking: b.id, message: `Hi ${b.name}, reminder: your ${b.service} is in 2 days. Reply 1 to confirm, 2 to reschedule, 3 to cancel.` });\n  if (h <= 2 && h > 0 && b.sent_2h !== 'yes') out.push({ route: 'whatsapp', to: b.phone, booking: b.id, message: `Hi ${b.name}, see you soon: your ${b.service} is in about 2 hours.` });\n  if (['none', 'unclear'].includes(reply) && h <= 24 && h > 0) out.push({ route: 'call', booking: b.id, message: `${b.id} ${b.name} (${b.service}) has not confirmed: please call ${b.phone}` });\n}\nreturn out.map(json => ({ json }));\n"
+      },
+      "id": "9ea1839d-62e2-5cd0-b53f-273dcda5e2a1",
+      "name": "Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a33154c9-bed9-59a3-a6f6-6d1a43791bc2",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "whatsapp",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "whatsapp"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "77f15cf5-cf18-50ee-96f6-7ae3a21c8231",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "call"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3bde36fb-56fa-5b33-a3fc-b40a90cff0ef",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        720,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "YOUR_PHONE_NUMBER_ID",
+        "recipientPhoneNumber": "={{ $json.to }}",
+        "textBody": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "id": "ae5e1170-f003-519d-9901-b11818b735e8",
+      "name": "Send WhatsApp message",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        980,
+        30
+      ],
+      "webhookId": "ae5e1170-f003-519d-9901-b11818b735e8"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#front-desk",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "5131faaa-3924-5b14-899d-2f60b127a6db",
+      "name": "Ask front desk to call",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        980,
+        210
+      ],
+      "webhookId": "5131faaa-3924-5b14-899d-2f60b127a6db"
+    },
+    {
+      "parameters": {
+        "content": "## Appointment Reminder System\nReminders at 48 hours and 2 hours, one-tap confirm or reschedule, and freed slots offered to the waitlist.\n\nRuns hourly over your bookings sheet. Add a formula column `hours_until` (appointment time minus now) and columns for the patient's latest reply and which reminders were sent. Sends the 48h and 2h reminders, offers cancelled slots to the next person on the waitlist, and flags unconfirmed bookings within 24 hours for a phone call.\n\n**Try it:** click *Test workflow* to run on the sample data. Then connect your credentials on the output nodes and activate.\n\nCode and docs: github.com/Princewill106/appointment-reminder-system",
+        "height": 340,
+        "width": 420,
+        "color": 5
+      },
+      "id": "12f5ce4a-be6a-5686-b4dc-8b8f2f7b885e",
+      "name": "About this workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -460
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule (hourly)": {
+      "main": [
+        [
+          {
+            "node": "Read bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test with sample data": {
+      "main": [
+        [
+          {
+            "node": "Sample data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read bookings": {
+      "main": [
+        [
+          {
+            "node": "Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample data": {
+      "main": [
+        [
+          {
+            "node": "Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logic": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask front desk to call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
